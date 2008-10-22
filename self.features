@@ -1,4 +1,5 @@
 Feature:
+  In order to test pycucumber
 
   Scenario:
     Given a feature file success.feature

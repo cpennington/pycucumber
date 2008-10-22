@@ -1,6 +1,9 @@
 import re
 import pprint
-from pyparsing import restOfLine, ZeroOrMore, LineStart, Optional, White, Suppress, Group, Dict, Literal, Keyword, Word, ParserElement
+from pyparsing import ZeroOrMore, LineStart, Optional, Suppress
+from pyparsing import Group, Keyword, ParserElement, Combine, Word, printables
+from pyparsing import LineEnd, White, alphanums, CharsNotIn
+
 
 _givens = []
 _whens = []
@@ -18,24 +21,30 @@ Given = create_collector(_givens)
 When = create_collector(_whens)
 Then = create_collector(_thens)
 
+def named_line(starts_with, name = None):
+    ParserElement.setDefaultWhitespaceChars(" \t")
+    
+    line = Suppress(Keyword(starts_with)) + Combine(ZeroOrMore(CharsNotIn(" \t\r\n") + Optional(White(" \t")))) + Optional(Suppress(LineEnd() + ZeroOrMore(LineStart() + LineEnd())))
+    if (name):
+        line = line.setResultsName(name)
+    return line
+
 def grammar():
-    ParserElement.setDefaultWhitespaceChars([' ', '\t'])
-    internalWhite = White(' \t')
-    purpose = "In order" + Optional(internalWhite) + restOfLine.setResultsName("Purpose")
-    role = "As" + Optional(internalWhite) + restOfLine.setResultsName("Role")
-    goal = "To" + Optional(internalWhite) + restOfLine.setResultsName("Goal")
+    purpose = named_line("In order", "Purpose")
+    role = named_line("As", "Role")
+    goal = named_line("To", "Goal")
     header = Optional(purpose) + Optional(role) + Optional(goal)
 
-    repeats = ("And" + internalWhite) + restOfLine
+    repeats = named_line("And")
 
-    conditions = Group(("Given" + Optional(internalWhite)) + restOfLine + ZeroOrMore(repeats)).setResultsName("Givens")
-    actions = Group(("When" + Optional(internalWhite)) + restOfLine + ZeroOrMore(repeats)).setResultsName("Whens")
-    results = Group(("Then" + Optional(internalWhite)) + restOfLine + ZeroOrMore(repeats)).setResultsName("Thens")
+    conditions = Group(named_line("Given") + ZeroOrMore(repeats)).setResultsName("Givens")
+    actions = Group(named_line("When") + ZeroOrMore(repeats)).setResultsName("Whens")
+    results = Group(named_line("Then") + ZeroOrMore(repeats)).setResultsName("Thens")
 
-    scenario = ("Scenario:" + internalWhite) + restOfLine.setResultsName("Scenario") + conditions + actions + results
+    scenario = named_line("Scenario:", "Scenario") + conditions + actions + results
 
-    feature = ("Feature:" + internalWhite) + restOfLine.setResultsName("Feature") + ZeroOrMore(White('\n')) + header + scenario
-    
+    feature = named_line("Feature:", "Feature") + header + scenario
+        
     return feature
 
 def get_matches(bag, line):
@@ -43,7 +52,7 @@ def get_matches(bag, line):
     for (regex, fn) in bag:
         match = regex.match(line)
         if (match):
-            matches.append((fn, match.groupdict()))
+            matches.append((fn, match.groups()))
     return matches
 
 class Unimplemented(object):
@@ -93,15 +102,15 @@ class Skipped(object):
         return "Skipped: " + self.line
 
 class Executable(object):
-    def __init__(self, line, fn, kwargs):
+    def __init__(self, line, fn, args):
         self.line = line
         self.fn = fn
-        self.kwargs = kwargs
+        self.args = args
     def get_results(self, failed):
         if failed:
             return Skipped(self.line)
         try:
-            self.fn(**self.kwargs)
+            self.fn(*self.args)
         except Exception, e:
             return Failed(self.line, e)
         return Succeeded(self.line)
@@ -115,8 +124,8 @@ def add_tests(lines, bag, list):
         if (len(matches) > 1):
             list.append(Ambiguous(line, matches))
             continue
-        (fn, kwargs) = matches[0]
-        list.append(Executable(line, fn, kwargs))
+        (fn, args) = matches[0]
+        list.append(Executable(line, fn, args))
 
 # TODO: use inspect module to find arity
 # TODO: implement More Cases
