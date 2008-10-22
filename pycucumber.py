@@ -132,11 +132,10 @@ def add_tests(lines, bag, list):
 # TODO: implement But
 # TODO: implement alternating actions and results
 
-
 def Test(text):
     print(text)
     feature = grammar().parseString(text)
-    print(feature.asXML())
+    
     tests = {
         'conds': [],
         'actions': [],
@@ -163,6 +162,8 @@ def Test(text):
         result = test.get_results(actions_failed)
         results.append(result)
 
-    
+    return results
+
+def display_results(results):
     for result in results:
         print result
