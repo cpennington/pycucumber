@@ -1,5 +1,6 @@
 import re
 import pprint
+import traceback
 from pyparsing import ZeroOrMore, LineStart, Optional, Suppress
 from pyparsing import Group, Keyword, ParserElement, Combine, Word, printables
 from pyparsing import LineEnd, White, alphanums, CharsNotIn
@@ -83,7 +84,7 @@ class Failed(object):
     def is_success(self):
         return False
     def __str__(self):
-        return "Failed: " + self.line + "\n" + str(self.reason)
+        return "Failed: " + self.line + "\n" + self.reason
 
 class Succeeded(object):
     def __init__(self, line):
@@ -112,7 +113,7 @@ class Executable(object):
         try:
             self.fn(*self.args)
         except Exception, e:
-            return Failed(self.line, e)
+            return Failed(self.line, traceback.format_exc(e))
         return Succeeded(self.line)
 
 def add_tests(lines, bag, list):
