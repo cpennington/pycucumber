@@ -24,8 +24,8 @@ def skip():
 def ambig():
     assert False
 
-@Given(".*uous")
-@When(".*uous")
-@Then(".*uous")
+@Given("ambiguous")
+@When("ambiguous")
+@Then("ambiguous")
 def uous():
     assert False

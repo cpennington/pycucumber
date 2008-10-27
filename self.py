@@ -2,8 +2,30 @@ from __future__ import with_statement
 import os
 
 from pycucumber import Given, When, Then, Test, display_results
-from ast_visitors import Succeeded, Failed, Unimplemented, Ambiguous, Skipped
+from ast_visitors import Succeeded, Failed, Unimplemented, Ambiguous, Skipped, Visitor
 import sys
+
+class ResultCounter(Visitor):
+    def __init__(self, result_type):
+        self.count = 0
+        self.result_type = result_type
+
+    def visitFeature(self, feature):
+        for child in feature.children():
+            child.accept(self)
+        return self.count
+
+    def visitCondition(self, cond):
+        if type(cond.result) == self.result_type:
+            self.count += 1
+
+    def visitAction(self, act):
+        if type(act.result) == self.result_type:
+            self.count += 1
+
+    def visitResult(self, res):
+        if type(res.result) == self.result_type:
+            self.count += 1
 
 class PyCucumberTest(object):
     def set_feature(self, file):
@@ -18,19 +40,11 @@ class PyCucumberTest(object):
             self.results = Test("".join(feature.readlines()))
     
     def did_test_pass(self):
-        for scenario in self.results:
-            for test_result in scenario:
-                if type(test_result) != Succeeded:
-                    return False
-        return True
+        return self.results.result.is_success()
 
     def count_results(self, result_type):
-        count = 0
-        for scenario in self.results:
-            for test_result in scenario:
-                if type(test_result) == result_type:
-                    count += 1
-        return count
+        return ResultCounter(result_type).visitFeature(self.results)
+
 
 cuke_test = PyCucumberTest()
 

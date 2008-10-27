@@ -46,65 +46,92 @@ def grammar():
 def parse(text):
     return grammar().parseString(text)["feature"][0]
 
-class Purpose(object):
+class TestNode(object):
+    def children(self):
+        return []
+
+class Purpose(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
     def accept(self, visitor):
         return visitor.visitPurpose(self)
 
 
-class Role(object):
+class Role(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
     def accept(self, visitor):
         return visitor.visitRole(self)
 
 
-class Goal(object):
+class Goal(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
     def accept(self, visitor):
         return visitor.visitGoal(self)
 
 
-class Condition(object):
+class Condition(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
+        self.result = None
     def accept(self, visitor):
         return visitor.visitCondition(self)
     
 
-class Action(object):
+class Action(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
+        self.result = None
     def accept(self, visitor):
         return visitor.visitAction(self)
 
 
-class Result(object):
+class Result(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
+        self.result = None
     def accept(self, visitor):
         return visitor.visitResult(self)
 
 
-class Feature(object):
+class Feature(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
         self.purpose = tokens["purpose"][0] if "purpose" in tokens else None
         self.role = tokens["role"][0] if "role" in tokens else None
         self.goal = tokens["goal"][0] if "goal" in tokens else None
         self.scenarios = tokens["scenarios"]
+        self.result = None
 
     def accept(self, visitor):
         return visitor.visitFeature(self)
+    
+    def children(self):
+        children = []
+        if self.purpose:
+            children.append(self.purpose)
+        if self.role:
+            children.append(self.role)
+        if self.goal:
+            children.append(self.goal)
+        children.extend(self.scenarios)
+        return children
 
 
-class Scenario(object):
+class Scenario(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
         self.conditions = tokens["conditions"]
         self.actions = tokens["actions"]
         self.results = tokens["results"]
+        self.result = None
     def accept(self, visitor):
         return visitor.visitScenario(self)
+
+    def children(self):
+        children = []
+        children.extend(self.conditions)
+        children.extend(self.actions)
+        children.extend(self.results)
+        return children
