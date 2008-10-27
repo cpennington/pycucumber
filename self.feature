@@ -3,7 +3,7 @@ Feature:
 
   Scenario:
     Given a feature file success.feature
-    And a rules file success.py
+    And a rules file simple.py
     When I run them
     Then the feature should pass
     And 3 test should pass

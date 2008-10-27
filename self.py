@@ -2,7 +2,7 @@ from __future__ import with_statement
 import os
 
 from pycucumber import Given, When, Then, Test, display_results
-from pycucumber import Succeeded, Failed, Unimplemented, Ambiguous, Skipped
+from ast_visitors import Succeeded, Failed, Unimplemented, Ambiguous, Skipped
 import sys
 
 class PyCucumberTest(object):
@@ -18,10 +18,19 @@ class PyCucumberTest(object):
             self.results = Test("".join(feature.readlines()))
     
     def did_test_pass(self):
-        return all(type(result) == Succeeded for result in self.results)
+        for scenario in self.results:
+            for test_result in scenario:
+                if type(test_result) != Succeeded:
+                    return False
+        return True
 
     def count_results(self, result_type):
-        return len([result for result in self.results if type(result) == result_type])
+        count = 0
+        for scenario in self.results:
+            for test_result in scenario:
+                if type(test_result) == result_type:
+                    count += 1
+        return count
 
 cuke_test = PyCucumberTest()
 
