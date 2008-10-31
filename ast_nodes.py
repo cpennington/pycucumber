@@ -26,8 +26,8 @@ def repeat(type):
 def grammar():
     purpose = named_type(Purpose, prefixed_line("In order"), "purpose")
     role = named_type(Role, prefixed_line("As"), "role")
-    goal = named_type(Goal, prefixed_line("To"), "goal")
-    header = Optional(purpose) + Optional(role) + Optional(goal)
+    goal = named_type(Goal, prefixed_line("I want"), "goal")
+    header = Optional(role) + Optional(goal) + Optional(purpose)
 
     conditions = Group(named_type(Condition, prefixed_line("Given"))
                        + ZeroOrMore(repeat(Condition))).setResultsName("conditions")
@@ -36,7 +36,9 @@ def grammar():
     results = Group(named_type(Result, prefixed_line("Then"))
                     + ZeroOrMore(repeat(Result))).setResultsName("results")
 
-    scenario = named_type(Scenario, prefixed_line("Scenario:") + conditions + actions + results)
+    steps = Group(OneOrMore(named_type(Step, actions + results))).setResultsName("steps")
+    
+    scenario = named_type(Scenario, prefixed_line("Scenario:") + Optional(conditions) + steps)
 
     feature = named_type(Feature, prefixed_line("Feature:") + header + 
                          OneOrMore(scenario).setResultsName("scenarios"), "feature")
@@ -44,7 +46,7 @@ def grammar():
     return feature
 
 def parse(text):
-    return grammar().parseString(text)["feature"][0]
+    return grammar().parseString(text, True)["feature"][0]
 
 class TestNode(object):
     def children(self):
@@ -94,6 +96,15 @@ class Result(TestNode):
     def accept(self, visitor):
         return visitor.visitResult(self)
 
+class Step(TestNode):
+    def __init__(self, tokens):
+        self.actions = tokens["actions"]
+        self.results = tokens["results"]
+        self.result = None
+    def accept(self, visitor):
+        return visitor.visitStep(self)
+    def children(self):
+        return self.actions + self.results
 
 class Feature(TestNode):
     def __init__(self, tokens):
@@ -122,9 +133,8 @@ class Feature(TestNode):
 class Scenario(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
-        self.conditions = tokens["conditions"]
-        self.actions = tokens["actions"]
-        self.results = tokens["results"]
+        self.conditions = tokens["conditions"] if "conditions" in tokens else []
+        self.steps = tokens["steps"]
         self.result = None
     def accept(self, visitor):
         return visitor.visitScenario(self)
@@ -132,6 +142,5 @@ class Scenario(TestNode):
     def children(self):
         children = []
         children.extend(self.conditions)
-        children.extend(self.actions)
-        children.extend(self.results)
+        children.extend(self.steps)
         return children
