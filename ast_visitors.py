@@ -1,4 +1,5 @@
 import traceback
+import copy
 
 class Visitor(object):
     def __init__(self):
@@ -9,9 +10,21 @@ class Visitor(object):
             child.accept(self)
 
     def visitScenario(self, scenario):
-        self.conditions_failed = False
         for child in scenario.children():
             child.accept(self)
+
+    def visitStep(self, step):
+        for child in step.children():
+            child.accept(self)
+        pass
+
+    def visitMoreExamples(self, examples):
+        for child in examples.children():
+            child.accept(self)
+        pass
+
+    def visitExampleRow(self, example):
+        pass
 
     def visitPurpose(self, purpose):
         pass
@@ -31,17 +44,18 @@ class Visitor(object):
     def visitResult(self, res):
         pass
 
-    def visitStep(self, res):
-        pass
-
 
 class PrettyPrinter(Visitor):
     def __init__(self):
         self.indent = 0
         self.indent_str = "  "
 
+    def current_indent(self):
+        return self.indent_str*self.indent
+        
+
     def visitFeature(self, feature):
-        ret = u"%sFeature: %s\n" % (self.indent_str*self.indent, feature.text)
+        ret = u"%sFeature: %s\n" % (self.current_indent(), feature.text)
         self.indent += 1
         for child in feature.children():
             ret += child.accept(self)
@@ -49,16 +63,16 @@ class PrettyPrinter(Visitor):
         return ret
 
     def visitPurpose(self, purpose):
-        return u"%sIn order %s\n" % (self.indent_str*self.indent, purpose.text)
+        return u"%sIn order %s\n" % (self.current_indent(), purpose.text)
 
     def visitGoal(self, goal):
-        return u"%sI want %s\n" % (self.indent_str*self.indent, goal.text)
+        return u"%sI want %s\n" % (self.current_indent(), goal.text)
 
     def visitRole(self, role):
-        return "%sAs %s\n" % (self.indent_str*self.indent, role.text)
+        return "%sAs %s\n" % (self.current_indent(), role.text)
 
     def visitScenario(self, scenario):
-        ret = u"%sScenario: %s\n" % (self.indent_str*self.indent, scenario.text)
+        ret = u"%sScenario: %s\n" % (self.current_indent(), scenario.text)
         self.indent += 1
 
         self.first_cond = True
@@ -68,7 +82,7 @@ class PrettyPrinter(Visitor):
         return ret
 
     def format_test(self, test, prefix):
-        return u"%s%s %s (%s)\n" % (self.indent_str*self.indent,
+        return u"%s%s %s (%s)\n" % (self.current_indent(),
                                    prefix,
                                    test.text,
                                    test.result if test.result else "Not Yet Run")
@@ -98,6 +112,22 @@ class PrettyPrinter(Visitor):
         self.first_res = False
         return ret
 
+    def format_row(self, row_data):
+        return "%s|%s|" % (self.current_indent(), "|".join(row_data))
+
+    def visitMoreExamples(self, examples):
+        ret = u"%sMore Examples:\n" % self.current_indent()
+        
+        self.indent += 1
+        ret += self.format_row(examples.header) + "\n"
+        for child in examples.children():
+            ret += child.accept(self)
+        self.indent -= 1
+        return ret
+
+    def visitExampleRow(self, example):
+        return "%s (%s)\n" % (self.format_row(example.data), example.result.result if example.result.result else "Not Yet Run")
+
 
 def get_matches(bag, line):
     matches = []
@@ -107,50 +137,61 @@ def get_matches(bag, line):
             matches.append((fn, match.groups()))
     return matches
 
-def run_test(bag, line, failed):
+def run_test(bag, line, failed, arg_queue = None):
     matches = get_matches(bag, line)
     if (len(matches) == 0):
-        return Unimplemented()
+        return Unimplemented(line)
     if (len(matches) > 1):
-        return Ambiguous(matches)
+        return Ambiguous(matches, line)
     (fn, args) = matches[0]
+    if arg_queue:
+        args = [arg_queue.pop(0) for arg in args]
+        
     if failed:
-        return Skipped()
+        return Skipped(line)
     try:
         fn(*args)
     except Exception, e:
-        return Failed("%s\nMessage: %s" % (traceback.format_exc(e), e.message))
-    return Succeeded()
+        return Failed("%s\nMessage: %s" % (traceback.format_exc(e), e.message), line)
+    return Succeeded(line)
 
 class Unimplemented(object):
+    def __init__(self, line):
+        self.line = line
     def is_success(self):
         return False
     def __str__(self):
         return "Unimplemented"
 
 class Ambiguous(object):
-    def __init__(self, matches):
+    def __init__(self, matches, line):
         self.matches = matches
+        self.line = line
     def is_success(self):
         return False
     def __str__(self):
         return "Ambiguous"
 
 class Failed(object):
-    def __init__(self, reason):
+    def __init__(self, reason, line):
         self.reason = reason
+        self.line = line
     def is_success(self):
         return False
     def __str__(self):
         return "Failed: " + self.reason
 
 class Succeeded(object):
+    def __init__(self, line):
+        self.line = line
     def is_success(self):
         return True
     def __str__(self):
         return "Succeeded"
        
 class Skipped(object):
+    def __init__(self, line):
+        self.line = line
     def is_success(self):
         return False
     def __str__(self):
@@ -164,52 +205,64 @@ class TestRunner(Visitor):
         self.conditions_failed = False
         self.actions_failed = False
 
-    def visitPurpose(self, purpose):
-        return Succeeded()
+    def visitPurpose(self, purpose, arg_queue=None):
+        return Succeeded(str(purpose))
 
-    def visitGoal(self, goal):
-        return Succeeded()
+    def visitGoal(self, goal, arg_queue=None):
+        return Succeeded(str(goal))
 
-    def visitRole(self, role):
-        return Succeeded()
+    def visitRole(self, role, arg_queue=None):
+        return Succeeded(str(role))
+
+    def visitChildren(self, node, arg_queue=None):
+        first_failure = None
+        for child in node.children():
+            result = child.accept(self, arg_queue)
+            if not result.is_success() and not first_failure:
+                first_failure = result
+                
+        if not first_failure:
+            return Succeeded(str(node))
+        else:
+            return Failed("Child test %s" % first_failure, first_failure.line)
+        
 
     def visitFeature(self, feature):
-        all_passed = all([child.accept(self).is_success() for child in feature.children()])
-        if all_passed:
-            feature.result = Succeeded()
-        else:
-            feature.result = Failed(None)
+        feature.result = self.visitChildren(feature)
         return feature.result
 
-    def visitScenario(self, scenario):
-
+    def visitScenario(self, scenario, arg_queue=None):
         self.conditions_failed = False
-        all_passed = all([child.accept(self).is_success() for child in scenario.children()])
-        if all_passed:
-            scenario.result = Succeeded()
-        else:
-            scenario.result = Failed(None)
+        self.current_scenario = scenario
+        scenario.result = self.visitChildren(scenario, arg_queue)
         return scenario.result
 
-    def visitStep(self, step):
-        all_passed = all([child.accept(self).is_success() for child in step.children()])
-        if all_passed:
-            step.result = Succeeded()
-        else:
-            step.result = Failed(None)
+    def visitStep(self, step, arg_queue=None):
+        step.result = self.visitChildren(step, arg_queue)
         return step.result
 
-    def visitCondition(self, cond):
-        cond.result = run_test(self.cond_funcs, cond.text, self.conditions_failed)
+    def visitCondition(self, cond, arg_queue=None):
+        cond.result = run_test(self.cond_funcs, cond.text, self.conditions_failed, arg_queue)
         self.actions_failed = self.conditions_failed = self.conditions_failed or not cond.result.is_success()
         return cond.result
     
-    def visitAction(self, act):
-        act.result = run_test(self.act_funcs, act.text, self.actions_failed)
+    def visitAction(self, act, arg_queue=None):
+        act.result = run_test(self.act_funcs, act.text, self.actions_failed, arg_queue)
         self.actions_failed = self.actions_failed or not act.result.is_success()
         return act.result
 
-    def visitResult(self, res):
-        res.result = run_test(self.res_funcs, res.text, self.actions_failed)
+    def visitResult(self, res, arg_queue=None):
+        res.result = run_test(self.res_funcs, res.text, self.actions_failed, arg_queue)
         return res.result
 
+    def visitMoreExamples(self, examples, arg_queue=None):
+        examples.result = self.visitChildren(examples, arg_queue)
+        return examples.result
+
+    def visitExampleRow(self, example, arg_queue):
+        example.scenario = copy.deepcopy(self.current_scenario)
+        example.scenario.more_examples = None
+        self.visitScenario(example.scenario, copy.deepcopy(example.data))
+        example.result = example.scenario.result
+        return example.result
+        

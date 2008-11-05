@@ -1,6 +1,6 @@
 from __future__ import with_statement
 from optparse import OptionParser
-from pycucumber import Test, display_results
+from pycucumber import Test, display_results, display_implemented_commands
 
 def file_list_callback(option, opt_str, value, parser):
     assert value is None
@@ -43,11 +43,13 @@ def main():
         display_implemented_commands()
         return 0
     else:
+        succeeded = True
         for feature_file in options.features:
             with open(feature_file) as file:
                 results = Test(file.read())
                 display_results(results)
-                return not results.result.is_success()
+                succeeded = succeeded and results.result.is_success()
+        return not succeeded
 
 if __name__ == "__main__":
     int(main())

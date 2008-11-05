@@ -29,3 +29,9 @@ def ambig():
 @Then("ambiguous")
 def uous():
     assert False
+
+@Given("var:(.+)")
+@When("var:(.+)")
+@Then("var:(.+)")
+def variable(name):
+    assert name == 'pass'

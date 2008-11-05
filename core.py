@@ -2,6 +2,8 @@ from __future__ import with_statement
 import re
 from ast_nodes import Purpose, Role, Goal, Condition, Action, Result, Scenario, Feature, parse
 from ast_visitors import PrettyPrinter, TestRunner
+from regex_parser import parse_regex, SimplifyPrinter, TreePrinter
+import inspect
 
 _givens = []
 _whens = []
@@ -31,6 +33,11 @@ def Test(text):
 def display_results(feature):
     print PrettyPrinter().visitFeature(feature).encode('utf-8')
 
+def display_commands_in_bag(bag, name):
+    for (regex, fn) in bag:
+        tree = parse_regex(regex.pattern)
+        print "%s %s" % (name, tree.accept(SimplifyPrinter(["<%s>" % arg for arg in inspect.getargspec(fn)[0]])))
+
 def display_implemented_commands():
-    for (regex, fn) in _givens + _whens + _thens:
-        print fn.__doc__
+    for bag, name in [(_givens, "Given"), (_whens, "When"), (_thens, "Then")]:
+        display_commands_in_bag(bag, name)

@@ -2,7 +2,7 @@ from __future__ import with_statement
 import os
 
 from pycucumber import Given, When, Then, Test, display_results
-from ast_visitors import Succeeded, Failed, Unimplemented, Ambiguous, Skipped, Visitor
+from pycucumber.ast_visitors import Succeeded, Failed, Unimplemented, Ambiguous, Skipped, Visitor
 import sys
 
 class ResultCounter(Visitor):
@@ -26,6 +26,10 @@ class ResultCounter(Visitor):
     def visitResult(self, res):
         if type(res.result) == self.result_type:
             self.count += 1
+
+    def visitExampleRow(self, example):
+        example.scenario.accept(self)
+
 
 class PyCucumberTest(object):
     def set_feature(self, file):
@@ -69,7 +73,8 @@ def run_test():
 @Then(r"the feature should (pass|fail)")
 def check_result(result):
     global cuke_test
-    assert (result == 'pass') == cuke_test.did_test_pass(), "Test unexpectedly %sed" % result
+    actual = 'pass' if cuke_test.did_test_pass() else 'fail'
+    assert result == actual, "Test unexpectedly %sed" % actual
 
 @Then(r"(\d+) test(?:s)? should (.+)")
 def check_result(num_tests, condition):
