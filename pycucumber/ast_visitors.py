@@ -72,7 +72,7 @@ class PrettyPrinter(Visitor):
         return "%sAs %s\n" % (self.current_indent(), role.text)
 
     def visitScenario(self, scenario):
-        ret = u"%sScenario: %s\n" % (self.current_indent(), scenario.text)
+        ret = u"\n%sScenario: %s\n" % (self.current_indent(), scenario.text)
         self.indent += 1
 
         self.first_cond = True
@@ -116,7 +116,7 @@ class PrettyPrinter(Visitor):
         return "%s|%s|" % (self.current_indent(), "|".join(row_data))
 
     def visitMoreExamples(self, examples):
-        ret = u"%sMore Examples:\n" % self.current_indent()
+        ret = u"\n%sMore Examples:\n" % self.current_indent()
         
         self.indent += 1
         ret += self.format_row(examples.header) + "\n"
@@ -131,26 +131,33 @@ class PrettyPrinter(Visitor):
 
 def get_matches(bag, line):
     matches = []
-    for (regex, fn) in bag:
+    for (regex, fn, name) in bag:
         match = regex.match(line)
         if (match):
             matches.append((fn, match.groups()))
     return matches
 
-def run_test(bag, line, failed, arg_queue = None):
+def check_test(bag, line):
     matches = get_matches(bag, line)
     if (len(matches) == 0):
         return Unimplemented(line)
     if (len(matches) > 1):
         return Ambiguous(matches, line)
     (fn, args) = matches[0]
+    return WellFormed(fn, args)
+
+def run_test(bag, line, failed, arg_queue = None):
+    syntax_check = check_test(bag, line)
+    if not syntax_check.is_success():
+        return syntax_check
     if arg_queue:
-        args = [arg_queue.pop(0) for arg in args]
-        
+        args = [arg_queue.pop(0) for arg in syntax_check.args]
+    else:
+        args = syntax_check.args
     if failed:
         return Skipped(line)
     try:
-        fn(*args)
+        syntax_check.fn(*args)
     except Exception, e:
         return Failed("%s\nMessage: %s" % (traceback.format_exc(e), e.message), line)
     return Succeeded(line)
@@ -171,6 +178,22 @@ class Ambiguous(object):
         return False
     def __str__(self):
         return "Ambiguous"
+
+class WellFormed(object):
+    def __init__(self, fn, args):
+        self.fn = fn
+        self.args = args
+    def is_success(self):
+        return True
+    def __str__(self):
+        return "Well Formed"
+
+class WrongNumArgs(object):
+    def __init__(self, expected, actual):
+        self.expected = expected
+        self.actual = actual
+    def __str__(self):
+        return "Wrong Number of Arguments: %d expected, %d listed" % (self.expected, self.actual)
 
 class Failed(object):
     def __init__(self, reason, line):
@@ -266,4 +289,46 @@ class TestRunner(Visitor):
         self.visitScenario(example.scenario, copy.deepcopy(example.data))
         example.result = example.scenario.result
         return example.result
+        
+
+class CheckRules(Visitor):
+    def __init__(self, conditions, actions, results):
+        self.cond_funcs = conditions
+        self.act_funcs = actions
+        self.res_funcs = results
+        self.args_accurate = True
+
+    def visitCondition(self, cond):
+        cond.result = check_test(self.cond_funcs, cond.text)
+        if self.args_accurate and cond.result.is_success():
+            self.args_required += len(cond.result.args)
+        else:
+            self.args_accurate = False
+    
+    def visitAction(self, act):
+        act.result = check_test(self.act_funcs, act.text)
+        if self.args_accurate and act.result.is_success():
+            self.args_required += len(act.result.args)
+        else:
+            self.args_accurate = False
+
+    def visitResult(self, res):
+        res.result = check_test(self.res_funcs, res.text)
+        if self.args_accurate and res.result.is_success():
+            self.args_required += len(res.result.args)
+        else:
+            self.args_accurate = False
+
+    def visitScenario(self, scenario):
+        self.args_required = 0
+        for child in scenario.children():
+            child.accept(self)
+
+    def visitExampleRow(self, example):
+        if not self.args_accurate:
+            example.result = Skipped(None)
+        elif self.args_required != len(example.data):
+            example.result = WrongNumArgs(self.args_required, len(example.data))
+        else:
+            example.result = WellFormed(None, None)
         

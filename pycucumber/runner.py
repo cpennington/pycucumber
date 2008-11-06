@@ -27,6 +27,7 @@ def add_parse_options(parser):
     parser.add_option("-r", "--rules", action="callback", callback=file_list_callback, dest="rules")
     parser.add_option("-f", "--features", action="callback", callback=file_list_callback, dest="features")
     parser.add_option("-l", "--list", action="store_const", const="list", dest="command")
+    parser.add_option("-s", "--check-syntax", action="store_const", const="check", dest="command")
     
 
 def load_rules(rules):
@@ -46,9 +47,12 @@ def main():
         succeeded = True
         for feature_file in options.features:
             with open(feature_file) as file:
-                results = Test(file.read())
+                if options.command == "check":
+                    results = CheckSyntax(file.read())
+                else:
+                    results = Test(file.read())
+                    succeeded = succeeded and results.result.is_success()
                 display_results(results)
-                succeeded = succeeded and results.result.is_success()
         return not succeeded
 
 if __name__ == "__main__":

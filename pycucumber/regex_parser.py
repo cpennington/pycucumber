@@ -113,7 +113,7 @@ class Range(object):
 
 class Alternation(object):
     def __init__(self, tokens):
-        self.options = tokens.asList()
+        self.options = tokens[0].asList()
     def __repr__(self):
         return "Alternation(%r)" % self.options
     def __str__(self):
@@ -157,7 +157,7 @@ class SimplifyPrinter(object):
         return str(node)
 
     def visitAlternation(self, node):
-        return "[%s]" % " or ".join((str(option) for option in self.options))
+        return "[%s]" % " | ".join([option.accept(self) for option in node.options])
 
 class TreePrinter(object):
     def __init__(self, indent="  "):
@@ -213,7 +213,7 @@ def parser():
         escapedChar = ~reMacro + Combine("\\" + oneOf(list(printables)))
         reLiteralChar = "".join(c for c in string.printable if c not in r"\[]{}().*?+|")
 
-        reRange = Combine(lbrack + SkipTo(rbrack,ignore=escapedChar) + rbrack)
+        reRange = Combine(lbrack.suppress() + SkipTo(rbrack,ignore=escapedChar) + rbrack.suppress())
         reLiteral = ( escapedChar | oneOf(list(reLiteralChar)) )
         reDot = Literal(".")
         repetition = (
@@ -232,7 +232,7 @@ def parser():
             [
             (repetition, 1, opAssoc.LEFT, create(Repetition)),
             (None, 2, opAssoc.LEFT, create(Sequence)),
-            ('|', 2, opAssoc.LEFT, create(Alternation)),
+            (Suppress('|'), 2, opAssoc.LEFT, create(Alternation)),
             ]
             )
 

@@ -1,5 +1,6 @@
 from ast_nodes import prefixed_line, named_type, empty_line, comment, example_row
 from pyparsing import ZeroOrMore, SkipTo
+from core import override
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -59,6 +60,12 @@ class TestParsing(unittest.TestCase):
         self.assertEqual(SkipTo("a").parseString("ccca").asList(), ["ccc"])
         self.assertEqual(SkipTo("a", failOn="b").parseString("ccca").asList(), ["ccc"])
         self.assertEqual(SkipTo("a", failOn="b").parseString("cbca").asList(), ["ccc"])
+
+class TestMisc(unittest.TestCase):
+    def test_override(self):
+        self.assertEqual(list(override([1,2,3], [4,5,6,7,8])), [1,2,3,7,8])
+        self.assertEqual(list(override([], [4,5,6,7,8])), [4,5,6,7,8])
+        self.assertEqual(list(override([4,5,6,7,8], [1,2,3])), [4,5,6,7,8])
 
 
 if __name__ == '__main__':

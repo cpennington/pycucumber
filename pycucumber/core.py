@@ -1,7 +1,7 @@
 from __future__ import with_statement
 import re
 from ast_nodes import Purpose, Role, Goal, Condition, Action, Result, Scenario, Feature, parse
-from ast_visitors import PrettyPrinter, TestRunner
+from ast_visitors import PrettyPrinter, TestRunner, CheckRules
 from regex_parser import parse_regex, SimplifyPrinter, TreePrinter
 import inspect
 
@@ -10,9 +10,9 @@ _whens = []
 _thens = []
 
 def create_collector(bag):
-    def collector(regex):
+    def collector(regex, names=[]):
         def decorate(fn):
-            bag.append((re.compile(regex), fn))
+            bag.append((re.compile(regex), fn, names))
             return fn
         return decorate
     return collector
@@ -22,21 +22,43 @@ When = create_collector(_whens)
 Then = create_collector(_thens)
 
 def Test(text):
-    #print("Input:\n" + text)
-
     feature = parse(text)
+    feature.accept(TestRunner(_givens, _whens, _thens))
+    return feature
 
-    #print("AST:\n" + PrettyPrinter().visitFeature(feature))
-    TestRunner(_givens, _whens, _thens).visitFeature(feature)
+def CheckSyntax(text):
+    feature = parse(text)
+    feature.accept(CheckRules(_givens, _whens, _thens))
     return feature
 
 def display_results(feature):
-    print PrettyPrinter().visitFeature(feature).encode('utf-8')
+    print feature.accept(PrettyPrinter()).encode('utf-8')
+
+def override(*iterables):
+    iterables = map(iter, iterables)
+    while iterables:
+        results = []
+        to_remove = []
+        for it in iterables:
+            try:
+                res = it.next()
+                results.append(res)
+            except StopIteration:
+                to_remove.append(it)
+        for it in to_remove:
+            iterables.remove(it)
+        try:
+            yield results[0]
+        except IndexError:
+            raise StopIteration
+
 
 def display_commands_in_bag(bag, name):
-    for (regex, fn) in bag:
+    for (regex, fn, names) in bag:
         tree = parse_regex(regex.pattern)
-        command = "%s %s" % (name, tree.accept(SimplifyPrinter(["<%s>" % arg for arg in inspect.getargspec(fn)[0]])))
+        inspected_names = inspect.getargspec(fn)[0]
+        real_names = list(override(names, inspected_names))
+        command = "%s %s" % (name, tree.accept(SimplifyPrinter(["<%s>" % arg for arg in real_names])))
         description = fn.__doc__ if fn.__doc__ else "No description"
         print "%s: %s" % (command, description)
 
