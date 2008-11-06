@@ -83,10 +83,10 @@ class PrettyPrinter(Visitor):
 
     def format_test(self, test, prefix):
         return u"%s%s %s (%s)\n" % (self.current_indent(),
-                                   prefix,
-                                   test.text,
-                                   test.result if test.result else "Not Yet Run")
-
+                                    prefix,
+                                    test.text,
+                                    test.result if test.result else "Not Yet Run")
+    
     def visitCondition(self, cond):
         ret = self.format_test(cond, "Given" if self.first_cond else self.indent_str + "And")
         self.first_cond = False
@@ -168,7 +168,9 @@ class Unimplemented(object):
     def is_success(self):
         return False
     def __str__(self):
-        return "Unimplemented"
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Unimplemented"
 
 class Ambiguous(object):
     def __init__(self, matches, line):
@@ -177,7 +179,9 @@ class Ambiguous(object):
     def is_success(self):
         return False
     def __str__(self):
-        return "Ambiguous"
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Ambiguous"
 
 class WellFormed(object):
     def __init__(self, fn, args):
@@ -186,14 +190,18 @@ class WellFormed(object):
     def is_success(self):
         return True
     def __str__(self):
-        return "Well Formed"
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Well Formed"
 
 class WrongNumArgs(object):
     def __init__(self, expected, actual):
         self.expected = expected
         self.actual = actual
     def __str__(self):
-        return "Wrong Number of Arguments: %d expected, %d listed" % (self.expected, self.actual)
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Wrong Number of Arguments: %d expected, %d listed" % (self.expected, self.actual)
 
 class Failed(object):
     def __init__(self, reason, line):
@@ -202,7 +210,9 @@ class Failed(object):
     def is_success(self):
         return False
     def __str__(self):
-        return "Failed: " + self.reason
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Failed: " + self.reason
 
 class Succeeded(object):
     def __init__(self, line):
@@ -210,7 +220,9 @@ class Succeeded(object):
     def is_success(self):
         return True
     def __str__(self):
-        return "Succeeded"
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Succeeded"
        
 class Skipped(object):
     def __init__(self, line):
@@ -218,7 +230,9 @@ class Skipped(object):
     def is_success(self):
         return False
     def __str__(self):
-        return "Skipped"
+        return self.__unicode__().encode('ascii', 'backslashreplace')
+    def __unicode__(self):
+        return u"Skipped"
 
 class TestRunner(Visitor):
     def __init__(self, conditions, actions, results):
@@ -229,13 +243,13 @@ class TestRunner(Visitor):
         self.actions_failed = False
 
     def visitPurpose(self, purpose, arg_queue=None):
-        return Succeeded(str(purpose))
+        return Succeeded(unicode(purpose))
 
     def visitGoal(self, goal, arg_queue=None):
-        return Succeeded(str(goal))
+        return Succeeded(unicode(goal))
 
     def visitRole(self, role, arg_queue=None):
-        return Succeeded(str(role))
+        return Succeeded(unicode(role))
 
     def visitChildren(self, node, arg_queue=None):
         first_failure = None
@@ -245,7 +259,7 @@ class TestRunner(Visitor):
                 first_failure = result
                 
         if not first_failure:
-            return Succeeded(str(node))
+            return Succeeded(unicode(node))
         else:
             return Failed("Child test %s" % first_failure, first_failure.line)
         

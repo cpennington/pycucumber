@@ -22,17 +22,17 @@ When = create_collector(_whens)
 Then = create_collector(_thens)
 
 def Test(text):
-    feature = parse(text)
+    feature = parse(unicode(text, 'utf-8'))
     feature.accept(TestRunner(_givens, _whens, _thens))
     return feature
 
 def CheckSyntax(text):
-    feature = parse(text)
+    feature = parse(unicode(text, 'utf-8'))
     feature.accept(CheckRules(_givens, _whens, _thens))
     return feature
 
 def display_results(feature):
-    print feature.accept(PrettyPrinter()).encode('utf-8')
+    print feature.accept(PrettyPrinter())
 
 def override(*iterables):
     iterables = map(iter, iterables)
