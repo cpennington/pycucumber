@@ -25,8 +25,8 @@ def named_type(type, expression, name = None):
     ret = ret.setParseAction(create(type))
     return ret
 
-def repeat(type):
-    return named_type(type, prefixed_line("And"))
+def repeat(type, name):
+    return named_type(type, prefixed_line("And") | prefixed_line(name))
 
 def grammar():
     purpose = named_type(Purpose, prefixed_line("In order"), "purpose")
@@ -35,11 +35,11 @@ def grammar():
     header = Optional(role) + Optional(goal) + Optional(purpose)
 
     conditions = Group(named_type(Condition, prefixed_line("Given"))
-                       + ZeroOrMore(repeat(Condition))).setResultsName("conditions")
+                       + ZeroOrMore(repeat(Condition, "Given"))).setResultsName("conditions")
     actions = Group(named_type(Action, prefixed_line("When"))
-                    + ZeroOrMore(repeat(Action))).setResultsName("actions")
+                    + ZeroOrMore(repeat(Action, "When"))).setResultsName("actions")
     results = Group(named_type(Result, prefixed_line("Then"))
-                    + ZeroOrMore(repeat(Result))).setResultsName("results")
+                    + ZeroOrMore(repeat(Result, "Then"))).setResultsName("results")
 
     steps = Group(OneOrMore(named_type(Step, actions + results))).setResultsName("steps")
 
