@@ -39,7 +39,8 @@ class PyCucumberTest(object):
         self.rules = file
 
     def run_test(self):
-        execfile(self.rules)
+        global_dir = {}
+        execfile(self.rules, global_dir)
         with open(self.feature) as feature:
             self.results = Test("".join(feature.readlines()))
     
