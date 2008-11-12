@@ -1,5 +1,8 @@
+from __future__ import with_statement
+
 import traceback
 import copy
+import contextlib
 
 class Visitor(object):
     def __init__(self):
@@ -69,7 +72,7 @@ class PrettyPrinter(Visitor):
         return u"%sI want %s\n" % (self.current_indent(), goal.text)
 
     def visitRole(self, role):
-        return "%sAs %s\n" % (self.current_indent(), role.text)
+        return u"%sAs %s\n" % (self.current_indent(), role.text)
 
     def visitScenario(self, scenario):
         ret = u"\n%sScenario: %s\n" % (self.current_indent(), scenario.text)
@@ -128,6 +131,13 @@ class PrettyPrinter(Visitor):
     def visitExampleRow(self, example):
         return "%s (%s)\n" % (self.format_row(example.data), example.result if example.result else "Not Yet Run")
 
+feature_managers = []
+def RegisterFeatureContextManager(manager):
+    feature_managers.append(manager())
+
+scenario_managers = []
+def RegisterScenarioContextManager(manager):
+    scenario_managers.append(manager())
 
 def get_matches(bag, line):
     matches = []
@@ -146,7 +156,7 @@ def check_test(bag, line):
     (fn, args) = matches[0]
     return WellFormed(fn, args)
 
-def run_test(bag, line, failed, arg_queue = None):
+def run_test(bag, line, arg_queue = None):
     syntax_check = check_test(bag, line)
     if not syntax_check.is_success():
         return syntax_check
@@ -154,12 +164,10 @@ def run_test(bag, line, failed, arg_queue = None):
         args = [arg_queue.pop(0) for arg in syntax_check.args]
     else:
         args = syntax_check.args
-    if failed:
-        return Skipped(line)
     try:
         syntax_check.fn(*args)
     except Exception, e:
-        return Failed("%s\nMessage: %s" % (traceback.format_exc(e), e.message), line)
+        return Failed("%s" % traceback.format_exc(e), line)
     return Succeeded(line)
 
 class Unimplemented(object):
@@ -239,8 +247,6 @@ class TestRunner(Visitor):
         self.cond_funcs = conditions
         self.act_funcs = actions
         self.res_funcs = results
-        self.conditions_failed = False
-        self.actions_failed = False
 
     def visitPurpose(self, purpose, arg_queue=None):
         return Succeeded(unicode(purpose))
@@ -262,17 +268,19 @@ class TestRunner(Visitor):
             return Succeeded(unicode(node))
         else:
             return Failed("Child test %s" % first_failure, first_failure.line)
-        
 
     def visitFeature(self, feature):
-        feature.result = self.visitChildren(feature)
+        with contextlib.nested(*feature_managers):
+            feature.result = self.visitChildren(feature)
         return feature.result
 
     def visitScenario(self, scenario, arg_queue=None):
-        self.conditions_failed = False
-        self.actions_failed = False
+        self.execute_next_condition = True
+        self.execute_next_action = True
+        self.execute_next_result = True
         self.current_scenario = scenario
-        scenario.result = self.visitChildren(scenario, arg_queue)
+        with contextlib.nested(*scenario_managers):
+            scenario.result = self.visitChildren(scenario, arg_queue)
         return scenario.result
 
     def visitStep(self, step, arg_queue=None):
@@ -280,17 +288,25 @@ class TestRunner(Visitor):
         return step.result
 
     def visitCondition(self, cond, arg_queue=None):
-        cond.result = run_test(self.cond_funcs, cond.text, self.conditions_failed, arg_queue)
-        self.actions_failed = self.conditions_failed = self.conditions_failed or not cond.result.is_success()
+        cond.result = run_test(self.cond_funcs, cond.text, arg_queue) if self.execute_next_condition else Skipped(cond.text)
+        if not cond.result.is_success():
+            self.execute_next_condition = False
+            self.execute_next_action = False
+            self.execute_next_result = False
+            
         return cond.result
     
     def visitAction(self, act, arg_queue=None):
-        act.result = run_test(self.act_funcs, act.text, self.actions_failed, arg_queue)
-        self.actions_failed = self.actions_failed or not act.result.is_success()
+        act.result = run_test(self.act_funcs, act.text, arg_queue) if self.execute_next_action else Skipped(act.text)
+        if not act.result.is_success():
+            self.execute_next_action = False
+            self.execute_next_result = False
         return act.result
 
     def visitResult(self, res, arg_queue=None):
-        res.result = run_test(self.res_funcs, res.text, self.actions_failed, arg_queue)
+        res.result = run_test(self.res_funcs, res.text, arg_queue) if self.execute_next_result else Skipped(res.text)
+        if not res.result.is_success():
+            self.execute_next_action = False
         return res.result
 
     def visitMoreExamples(self, examples, arg_queue=None):
