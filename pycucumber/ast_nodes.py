@@ -11,7 +11,7 @@ ParserElement.setDefaultWhitespaceChars(" \t\r")
 
 EOL = LineEnd().suppress()
 empty_line = (LineStart() + Optional(White(" \t\r")) + EOL).setParseAction(replaceWith("<EMPTYLINE>")).leaveWhitespace()
-comment = (Suppress("#") + SkipTo(EOL) + EOL).setParseAction(replaceWith("<COMMENT>"))
+comment = (LineStart() + Suppress("#") + SkipTo(EOL) + EOL).setParseAction(replaceWith("<COMMENT>"))
 example_row = Suppress("|") + ZeroOrMore(SkipTo("|" | EOL).setParseAction(lambda t: [t[0].strip()]) + Suppress("|")) + EOL
 
 def prefixed_line(starts_with):
