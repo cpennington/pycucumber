@@ -12,7 +12,9 @@ _thens = []
 def create_collector(bag):
     def collector(regex, names=[]):
         def decorate(fn):
-            bag.append((re.compile(regex), fn, names))
+            # We append a \Z to the supplied regular expression to force it to match
+            # the entire line
+            bag.append((re.compile(r"%s\Z" % regex), fn, names))
             return fn
         return decorate
     return collector
