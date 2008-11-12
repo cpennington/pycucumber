@@ -167,7 +167,10 @@ class SimplifyPrinter(object):
         return unicode(node)
     
     def visitMacro(self, node):
-        return unicode(node)
+        if node.type == 'Z':
+            return ''
+        else:
+            return unicode(node)
 
     def visitRange(self, node):
         return unicode(node)
@@ -225,7 +228,7 @@ def parser():
         lparen = Literal("(")
         rparen = Literal(")")
         
-        reMacro = Suppress("\\") + oneOf(list("dws"))
+        reMacro = Suppress("\\") + oneOf(list("dwsZ"))
         escapedChar = ~reMacro + Combine("\\" + oneOf(list(printables)))
         reLiteralChar = "".join(c for c in string.printable if c not in r"\[]{}().*?+|")
 
