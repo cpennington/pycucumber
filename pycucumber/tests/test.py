@@ -1,6 +1,7 @@
-from ast_nodes import prefixed_line, named_type, empty_line, comment, example_row
-from pyparsing import ZeroOrMore, SkipTo
-from core import override
+from __future__ import with_statement
+from pycucumber.ast_nodes import prefixed_line, named_type, empty_line, comment, example_row, parse
+from pyparsing import ZeroOrMore, SkipTo, ParseException
+from pycucumber.core import override
 import unittest
 
 class TestParsing(unittest.TestCase):
@@ -59,7 +60,12 @@ class TestParsing(unittest.TestCase):
     def test_skip_to(self):
         self.assertEqual(SkipTo("a").parseString("ccca").asList(), ["ccc"])
         self.assertEqual(SkipTo("a", failOn="b").parseString("ccca").asList(), ["ccc"])
-        self.assertEqual(SkipTo("a", failOn="b").parseString("cbca").asList(), ["ccc"])
+        self.assertRaises(ParseException, SkipTo("a", failOn="b").parseString, "cbca")
+
+    def test_duplicate(self):
+        with open('parse_test.feature') as file:
+            string = file.read()
+            self.assertEqual(parse(string), parse(string))
 
 class TestMisc(unittest.TestCase):
     def test_override(self):

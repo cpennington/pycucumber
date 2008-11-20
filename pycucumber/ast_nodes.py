@@ -11,8 +11,8 @@ ParserElement.setDefaultWhitespaceChars(" \t\r")
 
 EOL = LineEnd().suppress()
 empty_line = (LineStart() + Optional(White(" \t\r")) + EOL).setParseAction(replaceWith("<EMPTYLINE>")).leaveWhitespace()
-comment = (LineStart() + Suppress("#") + SkipTo(EOL) + EOL).setParseAction(replaceWith("<COMMENT>"))
-example_row = Suppress("|") + ZeroOrMore(SkipTo("|" | EOL).setParseAction(lambda t: [t[0].strip()]) + Suppress("|")) + EOL
+comment = (LineStart() + Optional(White(" \t\r")) + Suppress("#") + SkipTo(EOL) + EOL).setParseAction(replaceWith("<COMMENT>")).leaveWhitespace()
+example_row = Suppress("|") + OneOrMore(SkipTo("|" | EOL).setParseAction(lambda t: [t[0].strip()]) + Suppress("|")) + EOL
 
 def prefixed_line(starts_with):
     line = (Suppress(Keyword(starts_with)) +
@@ -22,7 +22,7 @@ def prefixed_line(starts_with):
 
 def named_type(type, expression, name = None):
     ret = expression.setResultsName(name) if name else expression
-    ret = ret.setParseAction(create(type))
+    ret = ret.copy().setParseAction(create(type))
     return ret
 
 def repeat(type, name):
@@ -64,12 +64,18 @@ def parse(text):
 class TestNode(object):
     def children(self):
         return []
+    def __eq__(self, other):
+        return self.children() == other.children()
+    def __neq__(self, other):
+        return not self == other
 
 class Purpose(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
     def accept(self, visitor, *args, **kwargs):
         return visitor.visitPurpose(self, *args, **kwargs)
+    def __eq__(self, other):
+        return self.text == other.text
 
 
 class Role(TestNode):
@@ -77,6 +83,8 @@ class Role(TestNode):
         self.text = tokens["text"]
     def accept(self, visitor, *args, **kwargs):
         return visitor.visitRole(self, *args, **kwargs)
+    def __eq__(self, other):
+        return self.text == other.text
 
 
 class Goal(TestNode):
@@ -84,6 +92,8 @@ class Goal(TestNode):
         self.text = tokens["text"]
     def accept(self, visitor, *args, **kwargs):
         return visitor.visitGoal(self, *args, **kwargs)
+    def __eq__(self, other):
+        return self.text == other.text
 
 
 class Condition(TestNode):
@@ -92,6 +102,8 @@ class Condition(TestNode):
         self.result = None
     def accept(self, visitor, *args, **kwargs):
         return visitor.visitCondition(self, *args, **kwargs)
+    def __eq__(self, other):
+        return self.text == other.text
     
 
 class Action(TestNode):
@@ -100,6 +112,8 @@ class Action(TestNode):
         self.result = None
     def accept(self, visitor, *args, **kwargs):
         return visitor.visitAction(self, *args, **kwargs)
+    def __eq__(self, other):
+        return self.text == other.text
 
 
 class Result(TestNode):
@@ -108,6 +122,8 @@ class Result(TestNode):
         self.result = None
     def accept(self, visitor, *args, **kwargs):
         return visitor.visitResult(self, *args, **kwargs)
+    def __eq__(self, other):
+        return self.text == other.text
 
 
 class Step(TestNode):
@@ -144,6 +160,8 @@ class Feature(TestNode):
         children.extend(self.scenarios)
         return children
 
+    def __eq__(self, other):
+        return self.text == other.text and self.children() == other.children()
 
 class Scenario(TestNode):
     def __init__(self, tokens):
@@ -164,6 +182,9 @@ class Scenario(TestNode):
             children.append(self.more_examples)
         return children
 
+    def __eq__(self, other):
+        return self.text == other.text and self.children() == other.children()
+
 class MoreExamples(TestNode):
     def __init__(self, tokens):
         self.header = tokens["header"].asList()
@@ -175,6 +196,9 @@ class MoreExamples(TestNode):
 
     def children(self):
         return self.rows
+
+    def __eq__(self, other):
+        return self.header == other.header and self.children() == other.children()
 
 
 class ExampleRow(TestNode):
