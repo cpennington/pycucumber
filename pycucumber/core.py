@@ -34,7 +34,7 @@ def CheckSyntax(text):
     return feature
 
 def display_results(feature):
-    print feature.accept(PrettyPrinter())
+    print feature.accept(PrettyPrinter()).encode('utf-8')
 
 def override(*iterables):
     iterables = map(iter, iterables)
