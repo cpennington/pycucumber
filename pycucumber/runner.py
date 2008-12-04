@@ -78,4 +78,4 @@ def main():
         return not succeeded
 
 if __name__ == '__main__':
-    int(main())
+    exit(int(main()))
