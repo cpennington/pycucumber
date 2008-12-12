@@ -60,7 +60,7 @@ def display_commands_in_bag(bag, name):
         tree = parse_regex(regex.pattern)
         inspected_names = inspect.getargspec(fn)[0]
         real_names = list(override(names, inspected_names))
-        command = "%s %s" % (name, tree.accept(SimplifyPrinter(["<%s>" % arg for arg in real_names])))
+        command = "%s %s" % (name, tree.accept(SimplifyPrinter(["<%s>" % arg if arg is not None else None for arg in real_names])))
         description = fn.__doc__ if fn.__doc__ else "No description"
         print "%s: %s" % (command, description)
 

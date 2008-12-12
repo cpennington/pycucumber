@@ -148,12 +148,12 @@ class SimplifyPrinter(object):
 
     def visitGroup(self, node):
         if not node.type == "non-matching" and self.group_labels and len(self.group_labels):
-            return self.group_labels.pop(0)
-        elif node.type == "non-matching":
-            return "".join([child.accept(self) for child in node.children()])
-        else:
-            return "".join(["("] + [child.accept(self) for child in node.children()] + [")"])
-    
+            next_label = self.group_labels.pop(0)
+            if next_label is not None:
+                return next_label
+        
+        return "".join([child.accept(self) for child in node.children()])
+            
     def visitRepetition(self, node):
         if node.operator == "?":
             return "[%s]" % node.term.accept(self)
@@ -176,7 +176,7 @@ class SimplifyPrinter(object):
         return unicode(node)
 
     def visitAlternation(self, node):
-        return "[%s]" % " | ".join([option.accept(self) for option in node.options])
+        return "[%s]" % "|".join([option.accept(self) for option in node.options])
 
 class TreePrinter(object):
     def __init__(self, indent="  "):
