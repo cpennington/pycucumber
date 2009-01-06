@@ -3,7 +3,7 @@ from __future__ import with_statement
 import sys
 import pprint
 import os
-from pycucumber import Test, display_results, display_implemented_commands, CheckSyntax, package_globals
+from pycucumber import Test, display_implemented_commands, CheckSyntax, package_globals
 from argparse import ArgumentParser
 
 def load_rules(rules):
@@ -72,9 +72,8 @@ def main():
                 if args.command == 'check':
                     results = CheckSyntax(file.read())
                 else:
-                    results = Test(file.read())
+                    results = Test(file.read(), sys.stdout)
                     succeeded = succeeded and results.result.is_success()
-                display_results(results)
         return not succeeded
 
 if __name__ == '__main__':

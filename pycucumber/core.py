@@ -1,7 +1,7 @@
 from __future__ import with_statement
 import re
 from ast_nodes import Purpose, Role, Goal, Condition, Action, Result, Scenario, Feature, parse
-from ast_visitors import PrettyPrinter, TestRunner, CheckRules
+from ast_visitors import TestRunner, CheckRules
 from regex_parser import parse_regex, SimplifyPrinter, TreePrinter
 import inspect
 
@@ -23,18 +23,15 @@ Given = create_collector(_givens)
 When = create_collector(_whens)
 Then = create_collector(_thens)
 
-def Test(text):
+def Test(text, output_file):
     feature = parse(unicode(text, 'utf-8'))
-    feature.accept(TestRunner(_givens, _whens, _thens))
+    feature.accept(TestRunner(_givens, _whens, _thens, output_file))
     return feature
 
 def CheckSyntax(text):
     feature = parse(unicode(text, 'utf-8'))
     feature.accept(CheckRules(_givens, _whens, _thens))
     return feature
-
-def display_results(feature):
-    print feature.accept(PrettyPrinter()).encode('utf-8')
 
 def override(*iterables):
     iterables = map(iter, iterables)

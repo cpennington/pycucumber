@@ -1,4 +1,4 @@
-from core import Given, When, Then, Test, display_results, display_implemented_commands, CheckSyntax
+from core import Given, When, Then, Test, display_implemented_commands, CheckSyntax
 from ast_visitors import RegisterFeatureContextManager, RegisterScenarioContextManager
 
 __author__ = 'Calen Pennington'

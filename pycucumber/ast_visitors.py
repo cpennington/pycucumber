@@ -48,89 +48,6 @@ class Visitor(object):
         pass
 
 
-class PrettyPrinter(Visitor):
-    def __init__(self):
-        self.indent = 0
-        self.indent_str = "  "
-
-    def current_indent(self):
-        return self.indent_str*self.indent
-        
-
-    def visitFeature(self, feature):
-        ret = u"%sFeature: %s\n" % (self.current_indent(), feature.text)
-        self.indent += 1
-        for child in feature.children():
-            ret += child.accept(self)
-        self.indent -= 1
-        return ret
-
-    def visitPurpose(self, purpose):
-        return u"%sIn order %s\n" % (self.current_indent(), purpose.text)
-
-    def visitGoal(self, goal):
-        return u"%sI want %s\n" % (self.current_indent(), goal.text)
-
-    def visitRole(self, role):
-        return u"%sAs %s\n" % (self.current_indent(), role.text)
-
-    def visitScenario(self, scenario):
-        ret = u"\n%sScenario: %s\n" % (self.current_indent(), scenario.text)
-        self.indent += 1
-
-        self.first_cond = True
-        for child in scenario.children():
-            ret += child.accept(self)
-        self.indent -= 1
-        return ret
-
-    def format_test(self, test, prefix):
-        return u"%s%s %s (%s)\n" % (self.current_indent(),
-                                    prefix,
-                                    test.text,
-                                    test.result if test.result else "Not Yet Run")
-    
-    def visitCondition(self, cond):
-        ret = self.format_test(cond, "Given" if self.first_cond else self.indent_str + "And")
-        self.first_cond = False
-        return ret
-
-    def visitStep(self, step):
-        ret = ""
-
-        self.first_act = True
-        self.first_res = True
-
-        for child in step.children():
-            ret += child.accept(self)
-        return ret
-
-    def visitAction(self, act):
-        ret = self.format_test(act, "When" if self.first_act else self.indent_str + "And")
-        self.first_act = False
-        return ret
-
-    def visitResult(self, res):
-        ret = self.format_test(res, "Then" if self.first_res else self.indent_str + "And")
-        self.first_res = False
-        return ret
-
-    def format_row(self, row_data):
-        return "%s|%s|" % (self.current_indent(), "|".join(row_data))
-
-    def visitMoreExamples(self, examples):
-        ret = u"\n%sMore Examples:\n" % self.current_indent()
-        
-        self.indent += 1
-        ret += self.format_row(examples.header) + "\n"
-        for child in examples.children():
-            ret += child.accept(self)
-        self.indent -= 1
-        return ret
-
-    def visitExampleRow(self, example):
-        return "%s (%s)\n" % (self.format_row(example.data), example.result if example.result else "Not Yet Run")
-
 feature_managers = []
 def RegisterFeatureContextManager(manager):
     feature_managers.append(manager())
@@ -242,84 +159,215 @@ class Skipped(object):
     def __unicode__(self):
         return u"Skipped"
 
+def format_feature(feature):
+    return u"Feature: %s" % feature.text
+
+def format_purpose(purpose):
+    return u"In order %s" % purpose.text
+
+def format_goal(goal):
+    return u"I want %s" % goal.text
+
+def format_role(role):
+    return u"As %s" % role.text
+
+def format_scenario(scenario):
+    return u"Scenario: %s" % scenario.text
+
+def format_test_result(result):
+    return u"(%s)" % result if result else "Not Yet Run"
+
+def format_test(test, prefix, is_first, indent_str):
+    return u"%s %s" % (prefix if is_first else indent_str + "And",
+                       test.text)
+
+def format_action(action, is_first, indent_str):
+    return format_test(action, "When", is_first, indent_str)
+
+def format_condition(cond, is_first, indent_str):
+    return format_test(cond, "Given", is_first, indent_str)
+
+def format_result(result, is_first, indent_str):
+    return format_test(result, "Then", is_first, indent_str)
+
+def format_row(row_data):
+    return "|%s|" % "|".join(row_data), example.result
+
+class IndentManager:
+    def __init__(self):
+        self.indent = 0
+        self.indent_str = "  "
+
+    def __enter__(self):
+        self.indent += 1
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.indent -= 1
+
+    def indented_line(self, line):
+        return u"%s%s" % (self.indent_str*self.indent, line)
+
 class TestRunner(Visitor):
-    def __init__(self, conditions, actions, results):
+    def __init__(self, conditions, actions, results, output_file = None):
         self.cond_funcs = conditions
         self.act_funcs = actions
         self.res_funcs = results
+        self.output_file = output_file
+        self.indenter = IndentManager()
 
     def visitPurpose(self, purpose, arg_queue=None):
-        return Succeeded(unicode(purpose))
+        line = self.indenter.indented_line(format_purpose(purpose))
+        if self.output_file:
+            print >> self.output_file, line
+            self.output_file.flush()
+        return [line], Succeeded(unicode(purpose))
 
     def visitGoal(self, goal, arg_queue=None):
-        return Succeeded(unicode(goal))
+        line = self.indenter.indented_line(format_goal(goal))
+        if self.output_file:
+            print >> self.output_file, line
+            self.output_file.flush()
+        return [line], Succeeded(unicode(goal))
 
     def visitRole(self, role, arg_queue=None):
-        return Succeeded(unicode(role))
+        line = self.indenter.indented_line(format_role(role))
+        if self.output_file:
+            print >> self.output_file, line
+            self.output_file.flush()
+        return [line], Succeeded(unicode(role))
 
     def visitChildren(self, node, arg_queue=None):
         first_failure = None
-        for child in node.children():
-            result = child.accept(self, arg_queue)
-            if not result.is_success() and not first_failure:
-                first_failure = result
-                
+        child_lines = []
+        with self.indenter:
+            for child in node.children():
+                line, result = child.accept(self, arg_queue)
+                child_lines.append(line)
+                if not result.is_success() and not first_failure:
+                    first_failure = result
+
         if not first_failure:
-            return Succeeded(unicode(node))
+            return child_lines, Succeeded(unicode(node))
         else:
-            return Failed("Child test %s" % first_failure, first_failure.line)
+            return child_lines, Failed("Child test %s" % first_failure, first_failure.line)
 
     def visitFeature(self, feature):
-        with contextlib.nested(*feature_managers):
-            feature.result = self.visitChildren(feature)
-        return feature.result
+        line = self.indenter.indented_line(format_feature(feature))
+        if self.output_file:
+            print >> self.output_file, line
+            self.output_file.flush()
+
+        with contextlib.nested(*(feature_managers + [self.indenter])):
+            child_lines, feature.result = self.visitChildren(feature)
+
+        return [line] + child_lines, feature.result
 
     def visitScenario(self, scenario, arg_queue=None):
         self.execute_next_condition = True
         self.execute_next_action = True
         self.execute_next_result = True
         self.current_scenario = scenario
-        with contextlib.nested(*scenario_managers):
-            scenario.result = self.visitChildren(scenario, arg_queue)
-        return scenario.result
+
+        line = self.indenter.indented_line(format_scenario(scenario))
+        if self.output_file:
+            print >> self.output_file, line
+            self.output_file.flush()
+
+        self.first_cond = True
+
+        with contextlib.nested(*(scenario_managers + [self.indenter])):
+            child_lines, scenario.result = self.visitChildren(scenario, arg_queue)
+        return [line] + child_lines, scenario.result
 
     def visitStep(self, step, arg_queue=None):
-        step.result = self.visitChildren(step, arg_queue)
-        return step.result
+        self.first_action = True
+        self.first_result = True
+        child_lines, step.result = self.visitChildren(step, arg_queue)
+        return child_lines, step.result
 
     def visitCondition(self, cond, arg_queue=None):
+        start = self.indenter.indented_line(
+            format_condition(cond, self.first_cond, self.indenter.indent_str))
+        if self.output_file:
+            print >> self.output_file, start,
+            self.output_file.flush()
+
         cond.result = run_test(self.cond_funcs, cond.text, arg_queue) if self.execute_next_condition else Skipped(cond.text)
         if not cond.result.is_success():
             self.execute_next_condition = False
             self.execute_next_action = False
             self.execute_next_result = False
-            
-        return cond.result
-    
+
+        result = format_test_result(cond.result)
+        if self.output_file:
+            print >> self.output_file, result
+            self.output_file.flush()
+
+        self.first_cond = False
+        return [start + result], cond.result
+
     def visitAction(self, act, arg_queue=None):
+        start = self.indenter.indented_line(
+            format_action(act, self.first_action, self.indenter.indent_str))
+        if self.output_file:
+            print >> self.output_file, start,
+            self.output_file.flush()
+
         act.result = run_test(self.act_funcs, act.text, arg_queue) if self.execute_next_action else Skipped(act.text)
         if not act.result.is_success():
             self.execute_next_action = False
             self.execute_next_result = False
-        return act.result
+
+        result = format_test_result(act.result)
+        if self.output_file:
+            print >> self.output_file, result
+            self.output_file.flush()
+
+        self.first_action = False
+        return [start + result], act.result
 
     def visitResult(self, res, arg_queue=None):
+        start = self.indenter.indented_line(
+            format_result(res, self.first_result, self.indenter.indent_str))
+        if self.output_file:
+            print >> self.output_file, start,
+            self.output_file.flush()
+
         res.result = run_test(self.res_funcs, res.text, arg_queue) if self.execute_next_result else Skipped(res.text)
         if not res.result.is_success():
             self.execute_next_action = False
-        return res.result
+
+        result = format_test_result(res.result)
+        if self.output_file:
+            print >> self.output_file, result
+            self.output_file.flush()
+
+        self.first_result = False
+        return [start + result], res.result
 
     def visitMoreExamples(self, examples, arg_queue=None):
-        examples.result = self.visitChildren(examples, arg_queue)
-        return examples.result
+        with self.indenter:
+            child_lines, examples.result = self.visitChildren(examples, arg_queue)
+        return ['MoreExamples:'] + child_lines, examples.result
 
     def visitExampleRow(self, example, arg_queue):
+        row = self.indenter.indented_line(format_row(example))
+        if self.output_file:
+            print >> self.output_file, row,
+            self.output_file.flush()
+
         example.scenario = copy.deepcopy(self.current_scenario)
         example.scenario.more_examples = None
         self.visitScenario(example.scenario, copy.deepcopy(example.data))
         example.result = example.scenario.result
-        return example.result
-        
+
+        result = self.indenter.indented_line(format_result(example.result))
+        if self.output_file:
+            print >> self.output_file, result
+            self.output_file.flush()
+
+        return [row + result], example.result
+
 
 class CheckRules(Visitor):
     def __init__(self, conditions, actions, results):
@@ -334,7 +382,7 @@ class CheckRules(Visitor):
             self.args_required += len(cond.result.args)
         else:
             self.args_accurate = False
-    
+
     def visitAction(self, act):
         act.result = check_test(self.act_funcs, act.text)
         if self.args_accurate and act.result.is_success():
@@ -361,4 +409,3 @@ class CheckRules(Visitor):
             example.result = WrongNumArgs(self.args_required, len(example.data))
         else:
             example.result = WellFormed(None, None)
-        
