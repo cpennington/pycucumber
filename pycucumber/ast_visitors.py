@@ -5,49 +5,26 @@ import copy
 import contextlib
 
 class Visitor(object):
-    def __init__(self):
-        pass
+    def empty_generator(*args, **kwargs):
+        yield iter([]).next()
 
-    def visitFeature(self, feature):
-        for child in feature.children():
+    def yield_child_events(self, node):
+        for child in node.children():
             for event in child.accept(self):
                 yield event
 
-    def visitScenario(self, scenario):
-        for child in scenario.children():
-            for event in child.accept(self):
-                yield event
+    visitFeature = yield_child_events
+    visitScenario = yield_child_events
+    visitStep = yield_child_events
+    visitMoreExamples = yield_child_events
 
-    def visitStep(self, step):
-        for child in step.children():
-            for event in child.accept(self):
-                yield event
-
-    def visitMoreExamples(self, examples):
-        for child in examples.children():
-            for event in child.accept(self):
-                yield event
-
-    def visitExampleRow(self, example):
-        pass
-
-    def visitPurpose(self, purpose):
-        pass
-
-    def visitGoal(self, goal):
-        pass
-
-    def visitRole(self, role):
-        pass
-
-    def visitCondition(self, cond):
-        pass
-
-    def visitAction(self, act):
-        pass
-
-    def visitResult(self, res):
-        pass
+    visitExampleRow = empty_generator
+    visitPurpose = empty_generator
+    visitGoal = empty_generator
+    visitRole = empty_generator
+    visitCondition = empty_generator
+    visitAction = empty_generator
+    visitResult = empty_generator
 
 
 feature_managers = []
