@@ -10,21 +10,23 @@ class Visitor(object):
 
     def visitFeature(self, feature):
         for child in feature.children():
-            child.accept(self)
+            for event in child.accept(self):
+                yield event
 
     def visitScenario(self, scenario):
         for child in scenario.children():
-            child.accept(self)
+            for event in child.accept(self):
+                yield event
 
     def visitStep(self, step):
         for child in step.children():
-            child.accept(self)
-        pass
+            for event in child.accept(self):
+                yield event
 
     def visitMoreExamples(self, examples):
         for child in examples.children():
-            child.accept(self)
-        pass
+            for event in child.accept(self):
+                yield event
 
     def visitExampleRow(self, example):
         pass
@@ -148,7 +150,7 @@ class Succeeded(object):
         return self.__unicode__().encode('ascii', 'backslashreplace')
     def __unicode__(self):
         return u"Succeeded"
-       
+
 class Skipped(object):
     def __init__(self, line):
         self.line = line
@@ -160,22 +162,22 @@ class Skipped(object):
         return u"Skipped"
 
 def format_feature(feature):
-    return u"Feature: %s" % feature.text
+    return u"Feature: %s\n" % feature.text
 
 def format_purpose(purpose):
-    return u"In order %s" % purpose.text
+    return u"In order %s\n" % purpose.text
 
 def format_goal(goal):
-    return u"I want %s" % goal.text
+    return u"I want %s\n" % goal.text
 
 def format_role(role):
-    return u"As %s" % role.text
+    return u"As %s\n" % role.text
 
 def format_scenario(scenario):
-    return u"Scenario: %s" % scenario.text
+    return u"Scenario: %s\n" % scenario.text
 
 def format_test_result(result):
-    return u"(%s)" % result if result else "Not Yet Run"
+    return u"(%s)\n" % result if result else "Not Yet Run"
 
 def format_test(test, prefix, is_first, indent_str):
     return u"%s %s" % (prefix if is_first else indent_str + "And",
@@ -192,6 +194,9 @@ def format_result(result, is_first, indent_str):
 
 def format_row(row_data):
     return "|%s|" % "|".join(row_data), example.result
+
+def format_more_examples(examples):
+    return 'More Examples:\n'
 
 class IndentManager:
     def __init__(self):
@@ -216,51 +221,32 @@ class TestRunner(Visitor):
         self.indenter = IndentManager()
 
     def visitPurpose(self, purpose, arg_queue=None):
-        line = self.indenter.indented_line(format_purpose(purpose))
-        if self.output_file:
-            print >> self.output_file, line
-            self.output_file.flush()
-        return [line], Succeeded(unicode(purpose))
+        yield self.indenter.indented_line(format_purpose(purpose))
 
     def visitGoal(self, goal, arg_queue=None):
-        line = self.indenter.indented_line(format_goal(goal))
-        if self.output_file:
-            print >> self.output_file, line
-            self.output_file.flush()
-        return [line], Succeeded(unicode(goal))
+        yield self.indenter.indented_line(format_goal(goal))
 
     def visitRole(self, role, arg_queue=None):
-        line = self.indenter.indented_line(format_role(role))
-        if self.output_file:
-            print >> self.output_file, line
-            self.output_file.flush()
-        return [line], Succeeded(unicode(role))
+        yield self.indenter.indented_line(format_role(role))
 
     def visitChildren(self, node, arg_queue=None):
-        first_failure = None
-        child_lines = []
         with self.indenter:
             for child in node.children():
-                line, result = child.accept(self, arg_queue)
-                child_lines.append(line)
-                if not result.is_success() and not first_failure:
-                    first_failure = result
-
-        if not first_failure:
-            return child_lines, Succeeded(unicode(node))
-        else:
-            return child_lines, Failed("Child test %s" % first_failure, first_failure.line)
+                gen = child.accept(self, arg_queue)
+                result = None
+                try:
+                    while True:
+                        result = yield gen.send(result)
+                except StopIteration:
+                    pass
 
     def visitFeature(self, feature):
-        line = self.indenter.indented_line(format_feature(feature))
-        if self.output_file:
-            print >> self.output_file, line
-            self.output_file.flush()
-
+        yield self.indenter.indented_line(format_feature(feature))
         with contextlib.nested(*(feature_managers + [self.indenter])):
-            child_lines, feature.result = self.visitChildren(feature)
-
-        return [line] + child_lines, feature.result
+            gen = self.visitChildren(feature)
+            result = None
+            while True:
+                result = yield gen.send(result)
 
     def visitScenario(self, scenario, arg_queue=None):
         self.execute_next_condition = True
@@ -268,105 +254,79 @@ class TestRunner(Visitor):
         self.execute_next_result = True
         self.current_scenario = scenario
 
-        line = self.indenter.indented_line(format_scenario(scenario))
-        if self.output_file:
-            print >> self.output_file, line
-            self.output_file.flush()
-
+        yield self.indenter.indented_line(format_scenario(scenario))
         self.first_cond = True
 
         with contextlib.nested(*(scenario_managers + [self.indenter])):
-            child_lines, scenario.result = self.visitChildren(scenario, arg_queue)
-        return [line] + child_lines, scenario.result
+            gen = self.visitChildren(scenario, arg_queue)
+            result = None
+            while True:
+                result = yield gen.send(result)
 
     def visitStep(self, step, arg_queue=None):
         self.first_action = True
         self.first_result = True
-        child_lines, step.result = self.visitChildren(step, arg_queue)
-        return child_lines, step.result
+        gen = self.visitChildren(step, arg_queue)
+        result = None
+        while True:
+            result = yield gen.send(result)
 
     def visitCondition(self, cond, arg_queue=None):
-        start = self.indenter.indented_line(
+        yield self.indenter.indented_line(
             format_condition(cond, self.first_cond, self.indenter.indent_str))
-        if self.output_file:
-            print >> self.output_file, start,
-            self.output_file.flush()
-
-        cond.result = run_test(self.cond_funcs, cond.text, arg_queue) if self.execute_next_condition else Skipped(cond.text)
+        cond.result = yield lambda: run_test(self.cond_funcs, cond.text, arg_queue) if self.execute_next_condition else Skipped(cond.text)
         if not cond.result.is_success():
             self.execute_next_condition = False
             self.execute_next_action = False
             self.execute_next_result = False
 
-        result = format_test_result(cond.result)
-        if self.output_file:
-            print >> self.output_file, result
-            self.output_file.flush()
-
+        yield format_test_result(cond.result)
         self.first_cond = False
-        return [start + result], cond.result
 
     def visitAction(self, act, arg_queue=None):
-        start = self.indenter.indented_line(
+        yield self.indenter.indented_line(
             format_action(act, self.first_action, self.indenter.indent_str))
-        if self.output_file:
-            print >> self.output_file, start,
-            self.output_file.flush()
 
-        act.result = run_test(self.act_funcs, act.text, arg_queue) if self.execute_next_action else Skipped(act.text)
+        act.result = yield lambda: run_test(self.act_funcs, act.text, arg_queue) if self.execute_next_action else Skipped(act.text)
         if not act.result.is_success():
             self.execute_next_action = False
             self.execute_next_result = False
 
-        result = format_test_result(act.result)
-        if self.output_file:
-            print >> self.output_file, result
-            self.output_file.flush()
-
+        yield format_test_result(act.result)
         self.first_action = False
-        return [start + result], act.result
 
     def visitResult(self, res, arg_queue=None):
-        start = self.indenter.indented_line(
+        yield self.indenter.indented_line(
             format_result(res, self.first_result, self.indenter.indent_str))
-        if self.output_file:
-            print >> self.output_file, start,
-            self.output_file.flush()
 
-        res.result = run_test(self.res_funcs, res.text, arg_queue) if self.execute_next_result else Skipped(res.text)
+        res.result = yield lambda: run_test(self.res_funcs, res.text, arg_queue) if self.execute_next_result else Skipped(res.text)
         if not res.result.is_success():
             self.execute_next_action = False
 
-        result = format_test_result(res.result)
-        if self.output_file:
-            print >> self.output_file, result
-            self.output_file.flush()
-
+        yield format_test_result(res.result)
         self.first_result = False
-        return [start + result], res.result
 
     def visitMoreExamples(self, examples, arg_queue=None):
+        yield self.indenter.indented_line(format_more_examples(examples))
         with self.indenter:
-            child_lines, examples.result = self.visitChildren(examples, arg_queue)
-        return ['MoreExamples:'] + child_lines, examples.result
+            gen = self.visitChildren(examples, arg_queue)
+            result = None
+            while True:
+                result = yield gen.send(result)
 
     def visitExampleRow(self, example, arg_queue):
-        row = self.indenter.indented_line(format_row(example))
-        if self.output_file:
-            print >> self.output_file, row,
-            self.output_file.flush()
+        yield self.indenter.indented_line(format_row(example))
 
         example.scenario = copy.deepcopy(self.current_scenario)
         example.scenario.more_examples = None
-        self.visitScenario(example.scenario, copy.deepcopy(example.data))
+        gen = self.visitScenario(example.scenario, copy.deepcopy(example.data))
+        result = None
+        while True:
+            result = yield gen.send(result)
+
         example.result = example.scenario.result
 
-        result = self.indenter.indented_line(format_result(example.result))
-        if self.output_file:
-            print >> self.output_file, result
-            self.output_file.flush()
-
-        return [row + result], example.result
+        yield self.indenter.indented_line(format_result(example.result))
 
 
 class CheckRules(Visitor):
@@ -375,37 +335,119 @@ class CheckRules(Visitor):
         self.act_funcs = actions
         self.res_funcs = results
         self.args_accurate = True
+        self.indenter = IndentManager()
 
-    def visitCondition(self, cond):
+    def visitChildren(self, node, arg_queue=None):
+        with self.indenter:
+            for child in node.children():
+                gen = child.accept(self, arg_queue)
+                result = None
+                try:
+                    while True:
+                        result = yield gen.send(result)
+                except StopIteration:
+                    pass
+
+    def visitPurpose(self, purpose, arg_queue=None):
+        yield self.indenter.indented_line(format_purpose(purpose))
+
+    def visitGoal(self, goal, arg_queue=None):
+        yield self.indenter.indented_line(format_goal(goal))
+
+    def visitRole(self, role, arg_queue=None):
+        yield self.indenter.indented_line(format_role(role))
+
+    def visitFeature(self, feature):
+        yield self.indenter.indented_line(format_feature(feature))
+        with self.indenter:
+            gen = self.visitChildren(feature)
+            result = None
+            while True:
+                result = yield gen.send(result)
+
+    def visitScenario(self, scenario, arg_queue=None):
+        self.args_required = 0
+
+        yield self.indenter.indented_line(format_scenario(scenario))
+
+        self.first_cond = True
+        with self.indenter:
+            gen = self.visitChildren(scenario, arg_queue)
+            result = None
+            while True:
+                result = yield gen.send(result)
+
+    def visitStep(self, step, arg_queue=None):
+        self.first_action = True
+        self.first_result = True
+        gen = self.visitChildren(step, arg_queue)
+        result = None
+        while True:
+            result = yield gen.send(result)
+
+    def visitCondition(self, cond, arg_queue=None):
+        yield self.indenter.indented_line(
+            format_condition(cond, self.first_cond, self.indenter.indent_str))
         cond.result = check_test(self.cond_funcs, cond.text)
         if self.args_accurate and cond.result.is_success():
             self.args_required += len(cond.result.args)
         else:
             self.args_accurate = False
 
-    def visitAction(self, act):
+        self.first_cond = False
+        yield format_test_result(cond.result)
+
+    def visitAction(self, act, arg_queue=None):
+        yield self.indenter.indented_line(
+            format_action(act, self.first_action, self.indenter.indent_str))
+
         act.result = check_test(self.act_funcs, act.text)
         if self.args_accurate and act.result.is_success():
             self.args_required += len(act.result.args)
         else:
             self.args_accurate = False
 
-    def visitResult(self, res):
+        self.first_action = False
+        yield format_test_result(act.result)
+
+    def visitResult(self, res, arg_queue=None):
+        yield self.indenter.indented_line(
+            format_result(res, self.first_result, self.indenter.indent_str))
+
         res.result = check_test(self.res_funcs, res.text)
         if self.args_accurate and res.result.is_success():
             self.args_required += len(res.result.args)
         else:
             self.args_accurate = False
 
-    def visitScenario(self, scenario):
-        self.args_required = 0
-        for child in scenario.children():
-            child.accept(self)
+        self.first_result = False
+        yield format_test_result(res.result)
 
-    def visitExampleRow(self, example):
+    def visitMoreExamples(self, examples, arg_queue=None):
+        yield self.indenter.indented_line(format_more_examples(examples))
+        with self.indenter:
+            gen = self.visitChildren(examples, arg_queue)
+            result = None
+            while True:
+                result = yield gen.send(result)
+
+    def visitExampleRow(self, example, arg_queue):
+        yield self.indenter.indented_line(format_row(example))
         if not self.args_accurate:
             example.result = Skipped(None)
         elif self.args_required != len(example.data):
             example.result = WrongNumArgs(self.args_required, len(example.data))
         else:
             example.result = WellFormed(None, None)
+
+        yield self.indenter.indented_line(format_result(example.result))
+
+class YieldResults(Visitor):
+
+    def yield_result(self, node):
+        yield node.result
+
+    visitExampleRow = yield_result
+    visitCondition = yield_result
+    visitAction = yield_result
+    visitResult = yield_result

@@ -48,10 +48,10 @@ def grammar():
                                + example_row.setResultsName("header")
                                + OneOrMore(named_type(ExampleRow, example_row)).setResultsName("rows"),
                                "more_examples")
-    
+
     scenario = named_type(Scenario, prefixed_line("Scenario:") + Optional(conditions) + steps + Optional(more_examples))
 
-    feature = named_type(Feature, prefixed_line("Feature:") + header + 
+    feature = named_type(Feature, prefixed_line("Feature:") + header +
                          OneOrMore(scenario).setResultsName("scenarios"), "feature")
 
     feature.ignore(empty_line)
@@ -68,11 +68,17 @@ class TestNode(object):
         return self.children() == other.children()
     def __neq__(self, other):
         return not self == other
+    def accept(self, visitor, *args, **kwargs):
+        gen = self.get_gen(visitor, *args, **kwargs)
+        result = None
+        while True:
+            result = yield gen.send(result)
+
 
 class Purpose(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitPurpose(self, *args, **kwargs)
     def __eq__(self, other):
         return self.text == other.text
@@ -81,7 +87,7 @@ class Purpose(TestNode):
 class Role(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitRole(self, *args, **kwargs)
     def __eq__(self, other):
         return self.text == other.text
@@ -90,7 +96,7 @@ class Role(TestNode):
 class Goal(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitGoal(self, *args, **kwargs)
     def __eq__(self, other):
         return self.text == other.text
@@ -100,17 +106,17 @@ class Condition(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
         self.result = None
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitCondition(self, *args, **kwargs)
     def __eq__(self, other):
         return self.text == other.text
-    
+
 
 class Action(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
         self.result = None
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitAction(self, *args, **kwargs)
     def __eq__(self, other):
         return self.text == other.text
@@ -120,7 +126,7 @@ class Result(TestNode):
     def __init__(self, tokens):
         self.text = tokens["text"]
         self.result = None
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitResult(self, *args, **kwargs)
     def __eq__(self, other):
         return self.text == other.text
@@ -131,7 +137,7 @@ class Step(TestNode):
         self.actions = tokens["actions"].asList()
         self.results = tokens["results"].asList()
         self.result = None
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitStep(self, *args, **kwargs)
     def children(self):
         return self.actions + self.results
@@ -146,9 +152,9 @@ class Feature(TestNode):
         self.scenarios = tokens["scenarios"].asList()
         self.result = None
 
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitFeature(self, *args, **kwargs)
-    
+
     def children(self):
         children = []
         if self.purpose:
@@ -171,7 +177,7 @@ class Scenario(TestNode):
         self.more_examples = tokens["more_examples"][0] if "more_examples" in tokens else None
         self.result = None
 
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitScenario(self, *args, **kwargs)
 
     def children(self):
@@ -191,7 +197,7 @@ class MoreExamples(TestNode):
         self.rows = tokens["rows"].asList()
         self.result = None
 
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitMoreExamples(self, *args, **kwargs)
 
     def children(self):
@@ -207,7 +213,7 @@ class ExampleRow(TestNode):
         self.result = None
         self.scenario = None
 
-    def accept(self, visitor, *args, **kwargs):
+    def get_gen(self, visitor, *args, **kwargs):
         return visitor.visitExampleRow(self, *args, **kwargs)
 
     def children(self):

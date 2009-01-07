@@ -1,9 +1,11 @@
 from __future__ import with_statement
 import re
 from ast_nodes import Purpose, Role, Goal, Condition, Action, Result, Scenario, Feature, parse
-from ast_visitors import TestRunner, CheckRules
+from ast_visitors import TestRunner, CheckRules, Skipped, Succeeded, Failed
 from regex_parser import parse_regex, SimplifyPrinter, TreePrinter
 import inspect
+import readline
+import sys
 
 _givens = []
 _whens = []
@@ -23,15 +25,57 @@ Given = create_collector(_givens)
 When = create_collector(_whens)
 Then = create_collector(_thens)
 
-def Test(text, output_file):
+def Test(text, output_stream=sys.stdout, interactive=False):
+    return run_visitor(text, TestRunner(_givens, _whens, _thens), output_stream, interactive)
+
+def CheckSyntax(text, output_stream=sys.stdout):
+    return run_visitor(text, CheckRules(_givens, _whens, _thens), output_stream, False)
+
+def run_visitor(text, visitor, output_stream, interactive):
     feature = parse(unicode(text, 'utf-8'))
-    feature.accept(TestRunner(_givens, _whens, _thens, output_file))
+    feature_gen = feature.accept(visitor)
+    event = feature_gen.next()
+    try:
+        while True:
+            if callable(event):
+                if interactive:
+                    result = interact(event)
+                else:
+                    result = event()
+            else:
+                result = None
+                print >> output_stream, event,
+                output_stream.flush()
+            event = feature_gen.send(result)
+    except StopIteration:
+        pass
     return feature
 
-def CheckSyntax(text):
-    feature = parse(unicode(text, 'utf-8'))
-    feature.accept(CheckRules(_givens, _whens, _thens))
-    return feature
+previous_selection = 'r'
+def get_choice():
+    return raw_input("\n-- (R)un, (S)kip, (P)ass, or (F)ail [%s]: " % previous_selection).lower()
+
+options = {
+    's': Skipped(''),
+    'p': Succeeded(''),
+    'f': Failed('','Failed By User'),
+    }
+def interact(pending_event):
+    global previous_selection
+    result = None
+    while result is None:
+        input = get_choice()
+        if input == '':
+            input = previous_selection
+        else:
+            input = input[0]
+            previous_selection = input
+        try:
+            result = options[input]
+        except KeyError:
+            if input == 'r':
+                result = pending_event()
+    return result
 
 def override(*iterables):
     iterables = map(iter, iterables)

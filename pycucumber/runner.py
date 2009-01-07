@@ -3,6 +3,7 @@ from __future__ import with_statement
 import sys
 import pprint
 import os
+from ast_visitors import YieldResults
 from pycucumber import Test, display_implemented_commands, CheckSyntax, package_globals
 from argparse import ArgumentParser
 
@@ -45,6 +46,7 @@ def main():
         return 1
 
     load_rules(rules)
+
     parser = ArgumentParser()
     subparsers = parser.add_subparsers(dest='command')
     parser_list = subparsers.add_parser('list', help='list all commands implemented in the rule files')
@@ -52,6 +54,7 @@ def main():
     parser_check.add_argument('feature', nargs='+')
     parser_run = subparsers.add_parser('run', help='run the specified feature files')
     parser_run.add_argument('feature', nargs='+')
+    parser_run.add_argument('-i', '--interactive', action='store_true')
     if package_globals.rule_args:
         from_rules = parser_run.add_argument_group('from rules')
         for (stored_args, stored_kwargs) in package_globals.rule_args:
@@ -70,10 +73,10 @@ def main():
         for feature_file in args.feature:
             with open(feature_file) as file:
                 if args.command == 'check':
-                    results = CheckSyntax(file.read())
+                    feature = CheckSyntax(file.read())
                 else:
-                    results = Test(file.read(), sys.stdout)
-                    succeeded = succeeded and results.result.is_success()
+                    feature = Test(file.read(), sys.stdout, args.interactive)
+                    succeeded = succeeded and all(result.is_success() for result in feature.accept(YieldResults()))
         return not succeeded
 
 if __name__ == '__main__':
